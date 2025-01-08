@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+
+chat_path=./chat
+
+# Ask for next recipient (or set done to 1)
+ask_dest_or_quit() { 
+    read -r dest
+
+    # Happens when either no nickname was provided or EOF
+    if [[ -z "$dest" ]]; then
+        done=1
+    fi
+}
+
+# Send the given message into the file descriptor 3 (input)
+send_message_to_dest() {
+    message=$1
+    echo "$dest $message" >&3
+}
+
+# Close the file descriptor 3 (input) and wait for the forked process
+cleanup() {
+    exec 3>&-
+    wait $chat_pid
+
+    # remove the fifo
+    rm "$pipe_in" 
+}
+
+# Send a SIGINT to the chat process
+send_sigint_to_chat() {
+    kill -s SIGINT $chat_pid
+}
+
+main() {
+    done=0
+
+    # Ensure that the chat binary is there and executable
+    if [[ ! -x $chat_path ]]; then
+        echo "Error: $chat_path not found or not executable."
+        exit 1
+    fi
+
+    # Start chat and setup file descriptor 3 to write in its stdin
+    pipe_in=$(mktemp -u)
+    mkfifo "$pipe_in"
+    $chat_path "$@" < "$pipe_in" &
+    chat_pid=$!
+    exec 3> "$pipe_in"
+
+    # Handle signals 
+    trap cleanup SIGTERM
+    trap send_sigint_to_chat SIGINT 
+
+    ask_dest_or_quit
+    while [[ $done == 0 ]]; do
+        if ! read -r message; then
+            ask_dest_or_quit 
+            continue
+        fi
+
+        send_message_to_dest "$message"
+    done
+
+    cleanup
+}
+
+main "$@"
