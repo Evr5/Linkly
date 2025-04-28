@@ -1,0 +1,32 @@
+name: C++ Linkly Build (with Make + Cache)
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Cache CMake Build
+      uses: actions/cache@v4
+      with:
+        path: build/
+        key: build-cache-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          build-cache-${{ runner.os }}-
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake make g++
+
+    - name: Build with Make
+      run: |
+        make
